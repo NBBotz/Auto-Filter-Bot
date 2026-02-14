@@ -112,8 +112,8 @@ async def SilentXBotz_start():
     except Exception as e:
         LOGGER.error(f"Error fetching banned users/chats: {e}")
     if MULTIPLE_DB and not DATABASE_URI2:
-        print(
-            "Error: DATABASE_URI2 Is Not Provided But MULTIPLE_DB Is Set To True. "
+        LOGGER.error(
+            "DATABASE_URI2 Is Not Provided But MULTIPLE_DB Is Set To True. "
             "Please Fill The DATABASE_URI2 Var!"
         )
         sys.exit(1)
