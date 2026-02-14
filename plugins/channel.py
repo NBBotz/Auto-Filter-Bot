@@ -43,6 +43,7 @@ SILENTX_PREMIUM_UPDATE = """
 
 notified_movies = set()
 media_filter = filters.document | filters.video | filters.audio
+media_process_lock = asyncio.Lock()
 
 @Client.on_message(filters.chat(CHANNELS) & media_filter)
 async def media(bot, message):
@@ -52,15 +53,22 @@ async def media(bot, message):
             break
     else:
         return
+
     media.file_type = file_type
     media.caption = message.caption
-    success, silentxbotz = await save_file(media)
-    try:  
-        if success and silentxbotz == 1 and await get_status(bot.me.id):            
-            await send_movie_update(bot, file_name=media.file_name, caption=media.caption)
-    except Exception as e:
-        LOGGER.error(f"Error In Movie Update - {e}")
-        pass
+
+    async with media_process_lock:
+        try:
+            success, silentxbotz = await save_file(media)
+            if success:
+                LOGGER.info(f"Successfully saved file: {media.file_name}")
+            
+            if success and silentxbotz == 1 and await get_status(bot.me.id):            
+                await send_movie_update(bot, file_name=media.file_name, caption=media.caption)
+                
+        except Exception as e:
+            LOGGER.error(f"Error while saving media or sending update: {e}")
+            pass
 
 async def send_movie_update(bot, file_name, caption):
     try:
