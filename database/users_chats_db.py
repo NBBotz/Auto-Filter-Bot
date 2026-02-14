@@ -1,5 +1,6 @@
 import motor.motor_asyncio
-from info import *  
+from logging_helper import LOGGER
+from info import *
 from datetime import timedelta
 import time, datetime, pytz
 from pymongo.errors import DuplicateKeyError
@@ -31,7 +32,7 @@ class Database:
             for c in AUTH_REQ_CHANNEL:
                 c = str(c)
             result = await self.db.request[c].delete_many({})
-            print(result)
+            LOGGER.info(result)
 
     def new_user(self, id, name):
         return dict(
@@ -170,7 +171,7 @@ class Database:
             modified_count = result.modified_count
             return modified_count
         except Exception as e:
-            print(f"Error deleting settings for all groups: {str(e)}")
+            LOGGER.error(f"Error deleting settings for all groups: {str(e)}")
             raise
             
     async def disable_chat(self, chat, reason="No Reason"):
@@ -321,7 +322,7 @@ class Database:
             result = await self.users.update_one(filter_query, update_data)
             return result.matched_count == 1
         except Exception as e:
-            print(f"Error updating document: {e}")
+            LOGGER.error(f"Error updating document: {e}")
             return False
             
     # Premium expired reminder ( This Code Modified By @BOT_OWNER26)
