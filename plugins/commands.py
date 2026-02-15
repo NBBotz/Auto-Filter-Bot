@@ -754,7 +754,7 @@ async def topsearch_callback(client, callback_query):
     await callback_query.answer()
 
 @Client.on_message(filters.command('top_search'))
-async def top(_, message):
+async def top(client, message):
     bot_id = client.me.id
     maintenance_mode = await db.get_maintenance_status(bot_id)
     if maintenance_mode and message.from_user.id not in ADMINS:
