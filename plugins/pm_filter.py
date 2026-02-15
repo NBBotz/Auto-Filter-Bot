@@ -920,7 +920,6 @@ async def auto_filter(client, msg, spoll=False):
     if imdb:
         cap = TEMPLATE.format(
             query=search,
-            qurey=search,
             title=imdb['title'],
             votes=imdb['votes'],
             aka=imdb["aka"],
