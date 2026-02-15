@@ -35,6 +35,6 @@ async def grp_bd(bot, message):
         reply_markup=reply_markup)
     try:
         await k.pin()
-    except:
+    except Exception:
         pass
     await bot.leave_chat(message.chat.id)
