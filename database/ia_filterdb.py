@@ -1,3 +1,4 @@
+import asyncio
 from struct import pack
 import re
 import base64
@@ -13,6 +14,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from logging_helper import LOGGER
 import time
+from functools import lru_cache
 
 client = AsyncIOMotorClient(DATABASE_URI)
 db = client[DATABASE_NAME]
@@ -56,24 +58,51 @@ _db_size_cache = {
 }
 DB_SIZE_CACHE_DURATION = 60 
 
+
+@lru_cache(maxsize=512)
+def get_regex_pattern(query):
+    query = query.strip()
+    if not query:
+        raw_pattern = '.'
+    elif ' ' not in query:
+        raw_pattern = r"(\b|[\.\+\-_])" + re.escape(query) + r"(\b|[\.\+\-_])"
+    else:
+        parts = query.split(' ')
+        new_parts = []
+        for part in parts:
+            new_parts.append(r"(\b|[\.\+\-_])" + re.escape(part) + r"(\b|[\.\+\-_])")
+        raw_pattern = r".*[\s\.\+\-_()\[\]]".join(new_parts)
+    try:
+        return re.compile(raw_pattern, flags=re.IGNORECASE)
+    except Exception:
+        return None
+
+
 async def check_db_size(silentdb):
     try:
         global _db_size_cache
         current_time = time.time()
         is_primary = False
-        if isinstance(silentdb, AsyncIOMotorClient) or isinstance(silentdb, type(db)):
-            if silentdb.name == db.name: is_primary = True
-        elif hasattr(silentdb, 'db'):
-             if silentdb.db.name == db.name: is_primary = True
+
+        # Identify if it's the primary DB
+        if hasattr(silentdb, 'name') and silentdb.name == db.name:
+            is_primary = True
+        elif hasattr(silentdb, 'db') and silentdb.db.name == db.name:
+            is_primary = True
+
         if is_primary and (current_time - _db_size_cache['time'] < DB_SIZE_CACHE_DURATION):
             return _db_size_cache['size']
-        size = 0
-        if isinstance(silentdb, AsyncIOMotorClient) or isinstance(silentdb, type(db)):
-             size = (await silentdb.command("dbstats"))['dataSize']
-        elif hasattr(silentdb, 'db'):
-             size = (await silentdb.db.command("dbstats"))['dataSize']
-        elif hasattr(silentdb, 'collection'):
-            size = (await silentdb.collection.database.command("dbstats"))['dataSize']
+
+        stats = None
+        if hasattr(silentdb, 'command'):
+            stats = await silentdb.command("dbstats")
+        elif hasattr(silentdb, 'db') and hasattr(silentdb.db, 'command'):
+            stats = await silentdb.db.command("dbstats")
+        elif hasattr(silentdb, 'collection') and hasattr(silentdb.collection.database, 'command'):
+            stats = await silentdb.collection.database.command("dbstats")
+
+        size = stats.get('dataSize', 0) if stats else 0
+
         if is_primary:
             _db_size_cache['time'] = current_time
             _db_size_cache['size'] = size
@@ -95,10 +124,10 @@ async def save_file(media) -> Tuple[bool, int]:
                 saveMedia = Media2
                 use_secondary = True                
         if use_secondary:
-             exists_in_primary = await Media.count_documents({'file_id': file_id}, limit=1)
-             if exists_in_primary:
-                 LOGGER.info(f'{file_name} Is Already Saved In Primary Database!')
-                 return False, 0
+            exists_in_primary = await Media.find_one({'file_id': file_id})
+            if exists_in_primary:
+                LOGGER.info(f'{file_name} Is Already Saved In Primary Database!')
+                return False, 0
         file = saveMedia(
             file_id=file_id,
             file_ref=file_ref,
@@ -130,27 +159,15 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
             if user_max_btn:
                 max_results = 10
             else:
-                 max_results = int(MAX_B_TN)
+                max_results = int(MAX_B_TN)
         except (KeyError, ValueError):
             await save_group_settings(int(chat_id), 'max_btn', False)
             max_results = int(MAX_B_TN)
 
-    query = query.strip()
-    if not query:
-        raw_pattern = '.'
-    elif ' ' not in query:
-        raw_pattern = r"(\b|[\.\+\-_])" + query + r"(\b|[\.\+\-_])"
-    else:
-        parts = query.split(' ')
-        new_parts = []
-        for part in parts:
-             new_parts.append(r"(\b|[\.\+\-_])" + part + r"(\b|[\.\+\-_])")
-        raw_pattern = r".*[\s\.\+\-_()\[\]]".join(new_parts)
-    try:
-        regex = re.compile(raw_pattern, flags=re.IGNORECASE)
-    except Exception as e:
-        LOGGER.error(f"Regex Error: {e}")
+    regex = get_regex_pattern(query)
+    if not regex:
         return [], 0, 0
+
     if not isinstance(filter, dict):
         if USE_CAPTION_FILTER:
             filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
@@ -160,67 +177,79 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
         filter['file_type'] = file_type
     if max_results % 2 != 0:
         max_results += 1
-    cursor1 = Media.find(filter).sort('$natural', -1).skip(offset).limit(max_results)
+
+    # Use field projection to reduce data transfer
+    projection = {
+        'file_name': 1,
+        'file_size': 1,
+        'file_id': 1,
+        'file_type': 1,
+        'caption': 1,
+        '_id': 1
+    }
+
+    cursor1 = Media.find(filter, projection).sort('$natural', -1).skip(offset).limit(max_results)
     files = await cursor1.to_list(length=max_results)
     total_results = 0
+
     if not MULTIPLE_DB:
         if offset == 0 and len(files) < max_results:
-             total_results = len(files)
+            total_results = len(files)
         else:
-             total_results = await Media.count_documents(filter)
+            total_results = await Media.count_documents(filter)
     else:
-        count_db1 = await Media.count_documents(filter)
-        count_db2 = await Media2.count_documents(filter)
+        # Use asyncio.gather for concurrent counting
+        count_db1_task = Media.count_documents(filter)
+        count_db2_task = Media2.count_documents(filter)
+        count_db1, count_db2 = await asyncio.gather(count_db1_task, count_db2_task)
         total_results = count_db1 + count_db2
+
         if len(files) < max_results:
             remaining_needed = max_results - len(files)
             if len(files) > 0:
-                 cursor2 = Media2.find(filter).sort('$natural', -1).limit(remaining_needed)
-                 files2 = await cursor2.to_list(length=remaining_needed)
-                 files.extend(files2)
+                cursor2 = Media2.find(filter, projection).sort('$natural', -1).limit(remaining_needed)
+                files2 = await cursor2.to_list(length=remaining_needed)
+                files.extend(files2)
             else:
                 if offset >= count_db1:
                     offset_db2 = offset - count_db1
-                    cursor2 = Media2.find(filter).sort('$natural', -1).skip(offset_db2).limit(max_results)
+                    cursor2 = Media2.find(filter, projection).sort('$natural', -1).skip(offset_db2).limit(max_results)
                     files = await cursor2.to_list(length=max_results)
-                else:
-                    pass
+
     next_offset = offset + len(files)
     if next_offset >= total_results or len(files) == 0:
         next_offset = 0
     return files, next_offset, total_results
     
 async def get_bad_files(query, file_type=None):
-    query = query.strip()
-    if not query:
-        raw_pattern = '.'
-    elif ' ' not in query:
-        raw_pattern = r"(\b|[\.\+\-_])" + query + r"(\b|[\.\+\-_])"
-    else:
-        parts = query.split(' ')
-        new_parts = []
-        for part in parts:
-             new_parts.append(r"(\b|[\.\+\-_])" + part + r"(\b|[\.\+\-_])")
-        raw_pattern = r".*[\s\.\+\-_()]".join(new_parts)
-    try:
-        regex = re.compile(raw_pattern, flags=re.IGNORECASE)
-    except:
+    regex = get_regex_pattern(query)
+    if not regex:
         return [], 0
+
     if USE_CAPTION_FILTER:
         filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
     else:
         filter = {'file_name': regex}
     if file_type:
         filter['file_type'] = file_type
-    cursor1 = Media.find(filter).sort('$natural', -1)
-    files1 = await cursor1.to_list(length=(await Media.count_documents(filter)))
-    files = files1
+
     if MULTIPLE_DB:
-        cursor2 = Media2.find(filter).sort('$natural', -1)
-        files2 = await cursor2.to_list(length=(await Media2.count_documents(filter)))
-        files.extend(files2)
-    total_results = len(files)
-    return files, total_results
+        # Fetch from both in parallel
+        async def fetch_all(media_class):
+            cursor = media_class.find(filter).sort('$natural', -1)
+            count = await media_class.count_documents(filter)
+            return await cursor.to_list(length=count)
+
+        files1_task = fetch_all(Media)
+        files2_task = fetch_all(Media2)
+        files1, files2 = await asyncio.gather(files1_task, files2_task)
+        files = files1 + files2
+    else:
+        cursor = Media.find(filter).sort('$natural', -1)
+        count = await Media.count_documents(filter)
+        files = await cursor.to_list(length=count)
+
+    return files, len(files)
     
 
 async def get_file_details(query):
@@ -347,3 +376,22 @@ async def siletxbotz_get_series(limit: int = 30) -> Dict[str, List[int]]:
     except Exception as e:
         LOGGER.error(f"Error in siletxbotz_get_series: {e}")
         return {}
+
+
+async def create_indexes():
+    """Create necessary indexes for performance optimization."""
+    try:
+        from database.users_chats_db import db as user_db
+        await user_db.col.create_index("id", unique=True)
+        await user_db.grp.create_index("id", unique=True)
+
+        await Media.collection.create_index("file_type")
+        await Media.collection.create_index("file_size")
+
+        if MULTIPLE_DB:
+            await Media2.collection.create_index("file_type")
+            await Media2.collection.create_index("file_size")
+
+        LOGGER.info("✅ Database indexes ensured successfully.")
+    except Exception as e:
+        LOGGER.error(f"Error creating indexes: {e}")
