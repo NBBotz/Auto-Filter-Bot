@@ -1,10 +1,10 @@
 import motor.motor_asyncio
-from logging_helper import LOGGER
-from info import *
+from info import *  
 from datetime import timedelta
 import time, datetime, pytz
 from pymongo.errors import DuplicateKeyError
 from pymongo import MongoClient
+from logging_helper import LOGGER
 
 class Database:    
     def __init__(self, uri, database_name):
@@ -31,8 +31,8 @@ class Database:
         if AUTH_REQ_CHANNEL:
             for c in AUTH_REQ_CHANNEL:
                 c = str(c)
-            result = await self.db.request[c].delete_many({})
-            LOGGER.info(result)
+                result = await self.db.request[c].delete_many({})
+                LOGGER.info(f"Deleted {result.deleted_count} requests from {c}")
 
     def new_user(self, id, name):
         return dict(
