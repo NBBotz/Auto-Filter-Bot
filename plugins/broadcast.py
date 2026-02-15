@@ -10,7 +10,6 @@ from database.users_chats_db import db
 from info import ADMINS
 from utils import users_broadcast, groups_broadcast, temp, get_readable_time, clear_junk, junk_group
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
-import logging
 
 lock = asyncio.Lock()
 
@@ -265,7 +264,7 @@ async def junk_clear_group(bot, message):
                     try:
                         await bot.leave_chat(int(group['id']))
                     except Exception as e:
-                        print(f"{e} > {group['id']}")
+                        LOGGER.error(f"{e} > {group['id']}")
             done += 1
             if not done % 50:
                 try:

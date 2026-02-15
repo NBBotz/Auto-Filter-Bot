@@ -117,7 +117,7 @@ async def refercall(bot, query):
         parse_mode=enums.ParseMode.HTML
         )
     await query.answer()
-	
+
 async def build_pagination_buttons(btn, total_results, current_offset, next_offset, req, key, settings):
     limit = 10 if settings.get('max_btn') else int(MAX_B_TN)
     total_pages = math.ceil(total_results / limit)
@@ -626,16 +626,16 @@ async def cb_handler(client: Client, query: CallbackQuery):
             btn= [[
                 InlineKeyboardButton("𝖲𝗍𝗋𝖾𝖺𝗆", url=silent_stream),
                 InlineKeyboardButton("𝖣𝗈𝗐𝗇𝗅𝗈𝖺𝖽", url=silent_download)        
-	    ]]
+        ]]
             await query.edit_message_reply_markup(
                 reply_markup=InlineKeyboardMarkup(btn)
-	    )
+        )
             await silent_msg.reply_text(
                 text=f"•• ʟɪɴᴋ ɢᴇɴᴇʀᴀᴛᴇᴅ ꜰᴏʀ ɪᴅ #{user_id} \n•• ᴜꜱᴇʀɴᴀᴍᴇ : {username} \n\n•• ᖴᎥᒪᗴ Nᗩᗰᗴ : {fileName}",
                 quote=True,
                 disable_web_page_preview=True,
                 reply_markup=InlineKeyboardMarkup(btn)
-	    )                
+        )
         except Exception as e:
             LOGGER.error(e)
             await query.answer(f"⚠️ SOMETHING WENT WRONG \n\n{e}", show_alert=True)
@@ -724,7 +724,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 query.message.chat.id, 
                 query.message.id, 
                 InputMediaPhoto(SUBSCRIPTION)
-	        ) 
+            )
             await query.message.edit_text(
                 text=script.PREMIUM_TEXT.format(query.from_user.mention),
                 reply_markup=reply_markup,
@@ -745,7 +745,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 query.message.chat.id, 
                 query.message.id, 
                 InputMediaPhoto(SUBSCRIPTION)
-	        ) 
+            )
             await query.message.edit_text(
                 text=script.PREMIUM_UPI_TEXT.format(query.from_user.mention),
                 reply_markup=reply_markup,
@@ -767,12 +767,12 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 query.message.chat.id, 
                 query.message.id, 
                 InputMediaPhoto(random.choice(PICS))
-	        ) 
+            )
             await query.message.edit_text(
                 text=script.PREMIUM_STAR_TEXT,
                 reply_markup=reply_markup,
                 parse_mode=enums.ParseMode.HTML
-	    )
+        )
         except Exception as e:
             LOGGER.error(e)
 
@@ -829,7 +829,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 reply_markup=reply_markup,
                 parse_mode=enums.ParseMode.HTML 
             )
-		
+
     await query.answer(MSG_ALRT)
 
     
@@ -841,11 +841,11 @@ async def auto_filter(client, msg, spoll=False):
         if re.findall("((^\/|^,|^!|^\.|^[\U0001F600-\U000E007F]).*)", message.text):
             return
         if len(message.text) < 100:
-            search = await replace_words(message.text)		
+            search = await replace_words(message.text)
             search = search.lower()
             search = search.replace("-", " ")
             search = search.replace(":","")
-			search = search.replace("'","")
+            search = search.replace("'","")
             search = re.sub(r'\s+', ' ', search).strip()
             m=await message.reply_text(f'<b>Wait {message.from_user.mention} Searching Your Query: <i>{search}...</i></b>', reply_to_message_id=message.id)
             files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, filter=True)
