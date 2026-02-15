@@ -178,7 +178,7 @@ async def broadcast_group(bot, message):
                         f"❌ Failed: <code>{failed}</code>",
                         reply_markup=InlineKeyboardMarkup(btn)
                     )
-                except:
+                except Exception:
                     pass
 
     time_taken = get_readable_time(time.time() - start_time)
@@ -229,7 +229,7 @@ async def remove_junkuser__db(bot, message):
             if not done % 50:
                 try:
                     await sts.edit(f"In Progress:\n\nTotal Users {total_users}\nCompleted: {done} / {total_users}\nBlocked: {blocked}\nDeleted: {deleted}")
-                except: pass
+                except Exception: pass
 
     time_taken = datetime.timedelta(seconds=int(time.time()-start_time))
     await sts.delete()
@@ -264,12 +264,12 @@ async def junk_clear_group(bot, message):
                     try:
                         await bot.leave_chat(int(group['id']))
                     except Exception as e:
-                        LOGGER.error(f"{e} > {group['id']}")
+                        print(f"{e} > {group['id']}")
             done += 1
             if not done % 50:
                 try:
                     await sts.edit(f"in progress:\n\nTotal Groups {total_groups}\nCompleted: {done} / {total_groups}\nDeleted: {deleted}")
-                except: pass
+                except Exception: pass
 
     time_taken = datetime.timedelta(seconds=int(time.time()-start_time))
     await sts.delete()
