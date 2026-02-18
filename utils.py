@@ -420,17 +420,34 @@ def extract_request_content(message_text):
         return match.group(1).strip()
     return message_text.strip()
 
-def clean_filename(file_name):
-    if not file_name:
+def clean_filename(filename):
+    if not filename:
         return ""
+    parts = filename.rsplit('.', 1)
+    if len(parts) == 2 and len(parts[1]) <= 5:
+        name, ext = parts
+    else:
+        name, ext = filename, ""
+    original_name = name
+    name = re.sub(r'[_\-\.\+]', ' ', name)  
     if BAD_WORDS_REGEX:
-        file_name = BAD_WORDS_REGEX.sub("", file_name)
-    file_name = re.sub(r'http\S+|www\.\S+|@\w+|#\w+', '', file_name)
-    file_name = re.sub(r'[_\-\.\+]', ' ', file_name)
-    file_name = re.sub(r"[^a-zA-Z0-9\s]", " ", file_name)
-    file_name = re.sub(r'[^\x00-\x7F]+', '', file_name)
-    file_name = re.sub(r'\s+', ' ', file_name).strip()
-    return file_name
+        name = BAD_WORDS_REGEX.sub('', name)
+    name = re.sub(r'@\w+\s*', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'#\w+\s*', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'www\.\S+\s*', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'https?://\S+\s*', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\[\s*', ' ', name, flags=re.IGNORECASE)
+    name = re.sub(r'\s*\]', ' ', name, flags=re.IGNORECASE)
+    name = re.sub(r'\(\s*', ' ', name, flags=re.IGNORECASE)
+    name = re.sub(r'\s*\)', ' ', name, flags=re.IGNORECASE)
+    name = re.sub(r'[^\w\s]', ' ', name)
+    name = re.sub(r'\s+', ' ', name).strip()
+    if not name or not any(c.isalnum() for c in name):
+        words = re.findall(r'[A-Za-z0-9]+', original_name)
+        name = ' '.join(words) if words else "untitled"
+    name = ' '.join(w.capitalize() for w in name.split())  
+    final_result = f"{name}{ext}" if ext else name   
+    return final_result
 
 async def replace_words(string):
     ignorewords = IGNORE_WORDS

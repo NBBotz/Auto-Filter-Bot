@@ -119,11 +119,9 @@ async def SilentXBotz_start():
     except Exception as e:
         LOGGER.error(f"Error fetching banned users/chats: {e}")
     try:
-        from database.ia_filterdb import create_indexes
         await Media.ensure_indexes()
         if MULTIPLE_DB:
             await Media2.ensure_indexes()
-        await create_indexes()
         if MULTIPLE_DB:
             LOGGER.info("Multiple Database Mode On. Now Files Will Be Saved In Second DB If First DB Is Full")
         else:
