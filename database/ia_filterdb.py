@@ -116,18 +116,29 @@ async def save_file(media) -> Tuple[bool, int]:
         file_id, file_ref = unpack_new_file_id(media.file_id)
         file_name = clean_filename(media.file_name)
         use_secondary = False
-        saveMedia = Media        
+        saveMedia = Media
+
         if MULTIPLE_DB:
             primary_db_size = await check_db_size(db)
             db_change_limit_bytes = DB_CHANGE_LIMIT * 1024 * 1024
             if primary_db_size >= db_change_limit_bytes:
                 saveMedia = Media2
-                use_secondary = True                
+                use_secondary = True
+
         if use_secondary:
-            exists_in_primary = await Media.find_one({'file_id': file_id})
-            if exists_in_primary:
+            exists_in_primary, exists_in_secondary = await asyncio.gather(
+                Media.find_one({'_id': file_id}),
+                Media2.find_one({'_id': file_id})
+            )
+            if exists_in_primary or exists_in_secondary:
+                LOGGER.info(f'{file_name} Is Already Saved In Database!')
+                return False, 0
+        else:
+            exists = await Media.find_one({'_id': file_id})
+            if exists:
                 LOGGER.info(f'{file_name} Is Already Saved In Primary Database!')
                 return False, 0
+
         file = saveMedia(
             file_id=file_id,
             file_ref=file_ref,
@@ -254,12 +265,15 @@ async def get_bad_files(query, file_type=None):
 
 async def get_file_details(query):
     filter = {'file_id': query}
-    cursor = Media.find(filter)
-    filedetails = await cursor.to_list(length=1)
-    if not filedetails:
-        cursor2 = Media2.find(filter)
-        filedetails = await cursor2.to_list(length=1)
-    return filedetails
+    if MULTIPLE_DB:
+        result1, result2 = await asyncio.gather(
+            Media.find(filter).to_list(length=1),
+            Media2.find(filter).to_list(length=1)
+        )
+        return result1 if result1 else result2
+    else:
+        cursor = Media.find(filter)
+        return await cursor.to_list(length=1)
 
 
 def encode_file_id(s: bytes) -> str:
@@ -292,20 +306,25 @@ def unpack_new_file_id(new_file_id):
     file_ref = encode_file_ref(decoded.file_reference)
     return file_id, file_ref
 
+_TITLE_PROJECTION = {'file_name': 1, 'caption': 1, '_id': 0}
+
 async def siletxbotz_fetch_media(limit: int) -> List[dict]:
     try:
         if MULTIPLE_DB:
-            cursor = Media2.find().sort("$natural", -1).limit(limit)
-            files2 = await cursor.to_list(length=limit)
-            cursor = Media.find().sort("$natural", -1).limit(limit)
-            files1 = await cursor.to_list(length=limit)
-            return files1 + files2
-        cursor = Media.find().sort("$natural", -1).limit(limit)
-        files = await cursor.to_list(length=limit)
+            half = limit // 2
+            remainder = limit - half
+            results = await asyncio.gather(
+                Media.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(half).to_list(length=half),
+                Media2.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(remainder).to_list(length=remainder)
+            )
+            return results[0] + results[1]
+
+        files = await Media.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(limit).to_list(length=limit)
         return files
     except Exception as e:
         LOGGER.error(f"Error in siletxbotz_fetch_media: {e}")
         return []
+
 
 async def silentxbotz_clean_title(filename: str, is_series: bool = False) -> str:
     try:
@@ -326,15 +345,16 @@ async def silentxbotz_clean_title(filename: str, is_series: bool = False) -> str
     except Exception as e:
         LOGGER.error(f"Error in silentxbotz_clean_title: {e}")
         return filename
-        
+
+
 async def siletxbotz_get_movies(limit: int = 20) -> List[str]:
     try:
-        cursor = await siletxbotz_fetch_media(limit * 2)
+        candidates = await siletxbotz_fetch_media(limit * 2)
         results = set()
         pattern = r"(?:s\d{1,2}|season\s*\d+)(?:\s*e\d{1,2}|episode\s*\d+)?\b"
-        for file in cursor:
-            file_name = getattr(file, "file_name", "")
-            caption = getattr(file, "caption", "")
+        for file in candidates:
+            file_name = file.get("file_name") if isinstance(file, dict) else getattr(file, "file_name", "")
+            caption = file.get("caption", "") if isinstance(file, dict) else getattr(file, "caption", "")
             if not file_name:
                 continue
             if re.search(pattern, file_name, re.IGNORECASE) or (caption and re.search(pattern, caption, re.IGNORECASE)):
@@ -349,18 +369,20 @@ async def siletxbotz_get_movies(limit: int = 20) -> List[str]:
         LOGGER.error(f"Error in siletxbotz_get_movies: {e}")
         return []
 
+
 async def siletxbotz_get_series(limit: int = 30) -> Dict[str, List[int]]:
     try:
-        cursor = await siletxbotz_fetch_media(limit * 5)
+        candidates = await siletxbotz_fetch_media(limit * 3)
         grouped = defaultdict(list)
         pattern = r"(.*?)(?:S(\d{1,2})|Season\s*(\d+))"
-        for file in cursor:
-            file_name = getattr(file, "file_name", "")
+        for file in candidates:
+            file_name = file.get("file_name") if isinstance(file, dict) else getattr(file, "file_name", "")
+            caption = file.get("caption", "") if isinstance(file, dict) else getattr(file, "caption", "")
             if not file_name:
                 continue
             match = re.search(pattern, file_name, re.IGNORECASE)
-            if not match and getattr(file, "caption", ""):
-                 match = re.search(pattern, file.caption, re.IGNORECASE)
+            if not match and caption:
+                match = re.search(pattern, caption, re.IGNORECASE)
             if match:
                 title_part = match.group(1)
                 season_num = match.group(2) or match.group(3)
@@ -376,22 +398,3 @@ async def siletxbotz_get_series(limit: int = 30) -> Dict[str, List[int]]:
     except Exception as e:
         LOGGER.error(f"Error in siletxbotz_get_series: {e}")
         return {}
-
-
-async def create_indexes():
-    """Create necessary indexes for performance optimization."""
-    try:
-        from database.users_chats_db import db as user_db
-        await user_db.col.create_index("id", unique=True)
-        await user_db.grp.create_index("id", unique=True)
-
-        await Media.collection.create_index("file_type")
-        await Media.collection.create_index("file_size")
-
-        if MULTIPLE_DB:
-            await Media2.collection.create_index("file_type")
-            await Media2.collection.create_index("file_size")
-
-        LOGGER.info("✅ Database indexes ensured successfully.")
-    except Exception as e:
-        LOGGER.error(f"Error creating indexes: {e}")
