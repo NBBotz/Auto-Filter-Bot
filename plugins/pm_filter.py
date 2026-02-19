@@ -154,7 +154,7 @@ async def generic_filter_handler(client, query, key, offset, search_query):
     if settings.get('button'):
         for file in files:
             btn.append([InlineKeyboardButton(
-                text=f"{silent_size(file.file_size)}| {extract_tag(file.file_name)} {clean_filename(file.file_name)}",
+                text=f"{silent_size(file.file_size)} | {extract_tag(file.file_name)} {clean_filename(file.file_name)}",
                 callback_data=f'file#{file.file_id}'
             )])
     btn.insert(0, [
@@ -769,12 +769,12 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 query.message.chat.id, 
                 query.message.id, 
                 InputMediaPhoto(random.choice(PICS))
-	        ) 
+			)
             await query.message.edit_text(
                 text=script.PREMIUM_STAR_TEXT,
                 reply_markup=reply_markup,
                 parse_mode=enums.ParseMode.HTML
-	    )
+        )
         except Exception as e:
             LOGGER.error(e)
 
@@ -788,7 +788,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 text=script.EARN_INFO.format(temp.B_LINK),
                 reply_markup=reply_markup,
                 parse_mode=enums.ParseMode.HTML
-            ) 
+			)
         except Exception as e:
             LOGGER.error(e)
                     
@@ -857,7 +857,7 @@ async def auto_filter(client, msg, spoll=False):
                     ai_sts = await m.edit('🤖 ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ, ᴀɪ ɪꜱ ᴄʜᴇᴄᴋɪɴɢ ʏᴏᴜʀ ꜱᴘᴇʟʟɪɴɢ...')
                     is_misspelled = await ai_spell_check(chat_id = message.chat.id,wrong_name=search)
                     if is_misspelled:
-                        await ai_sts.edit(f'<b>✅Aɪ Sᴜɢɢᴇsᴛᴇᴅ ᴍᴇ<code> {is_misspelled}</code> \nSᴏ Iᴍ Sᴇᴀʀᴄʜɪɴɢ ғᴏʀ <code>{is_misspelled}</code></b>')
+                        await ai_sts.edit(f'<b><i>✅ Aɪ Sᴜɢɢᴇsᴛᴇᴅ ᴍᴇ<code> {is_misspelled}</code> \nSᴏ Iᴍ Sᴇᴀʀᴄʜɪɴɢ ғᴏʀ <code>{is_misspelled}</code></i></b>')
                         await asyncio.sleep(2)
                         message.text = is_misspelled
                         await ai_sts.delete()
@@ -882,7 +882,7 @@ async def auto_filter(client, msg, spoll=False):
     if settings.get('button'):
         for file in files:
             btn.append([InlineKeyboardButton(
-                text=f"{silent_size(file.file_size)}| {extract_tag(file.file_name)} {clean_filename(file.file_name)}",
+                text=f"{silent_size(file.file_size)} | {extract_tag(file.file_name)} {clean_filename(file.file_name)}",
                 callback_data=f'file#{file.file_id}'
             )])
     
@@ -1068,7 +1068,7 @@ async def advantage_spell_chok(client, message):
         await k.delete()
         try:
             await message.delete()
-        except:
+        except Exception:
             pass
         return
     user = message.from_user.id if message.from_user else 0
