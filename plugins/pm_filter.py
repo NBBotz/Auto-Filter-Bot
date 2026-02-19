@@ -5,7 +5,6 @@ import math
 import random
 import pytz
 from datetime import datetime, timedelta, date, time
-lock = asyncio.Lock()
 from database.users_chats_db import db
 from database.refer import referdb
 from pyrogram.errors.exceptions.bad_request_400 import MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty
@@ -36,7 +35,7 @@ BUTTON = {}
 BUTTONS = {}
 FRESH = {}
 SPELL_CHECK = {}
-
+lock = asyncio.Lock()
 
 @Client.on_message(filters.group & filters.text & filters.incoming)
 async def give_filter(client, message):
