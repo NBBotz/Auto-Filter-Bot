@@ -60,9 +60,6 @@ async def media(bot, message):
     async with media_process_lock:
         try:
             success, silentxbotz = await save_file(media)
-            if success:
-                LOGGER.info(f"Successfully saved file: {media.file_name}")
-            
             if success and silentxbotz == 1 and await get_status(bot.me.id):            
                 await send_movie_update(bot, file_name=media.file_name, caption=media.caption)
                 
