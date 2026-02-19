@@ -99,7 +99,7 @@ BATCH_FILE_CAPTION = environ.get("BATCH_FILE_CAPTION", CUSTOM_FILE_CAPTION)
 IMDB_TEMPLATE = environ.get("IMDB_TEMPLATE", f"{script.IMDB_TEMPLATE_TXT}")
 LONG_IMDB_DESCRIPTION = is_enabled(environ.get("LONG_IMDB_DESCRIPTION", "False"), False)
 SPELL_CHECK_REPLY = is_enabled(environ.get("SPELL_CHECK_REPLY", "True"), True)
-MAX_LIST_ELM = environ.get("MAX_LIST_ELM", None)
+MAX_LIST_ELM = int(environ.get("MAX_LIST_ELM") or 10) or None # Maximum number of elements in a list (default: 10, set 0 for no limit)
 INDEX_REQ_CHANNEL = int(environ.get('INDEX_REQ_CHANNEL', LOG_CHANNEL))
 FILE_STORE_CHANNEL = [int(ch) for ch in (environ.get('FILE_STORE_CHANNEL', '')).split()]
 MELCOW_NEW_USERS = is_enabled((environ.get('MELCOW_NEW_USERS', "False")), False)
@@ -111,7 +111,13 @@ STREAM_MODE = bool(environ.get('STREAM_MODE', True))
 MAINTENANCE_MODE = bool(environ.get('MAINTENANCE_MODE', False)) 
 
 IGNORE_WORDS = (list(os.environ.get("IGNORE_WORDS").split(",")) if os.environ.get("IGNORE_WORDS") else []) #Remove Words While Searching Files
-IGNORE_WORDS= ["movies", "Movies", ",", "episode", "Episode", "episodes", "Episodes", "south indian", "south indian movie", "South Indian Movie", "south movie", "South Movie", "South Indian", "web-series", "hindi me bhejo", "gujrati", "combined", "!", "kro", "jaldi", "Audio", "audio", "movi", "language", "Language", "Hollywood", "All", "all", "bollywood", "Bollywood", "South", "south", "HD", "hd", "karo", "Karo", "fullepisode", "please", "plz", "Please", "Plz", "send", "link", "Link", "full", "Full", "dabbed", "dubbed", "season", "Season", "web", "series", "Web", "Series", "webseries", "WebSeries", "upload", "HD", "Hd", "bhejo", "ful", "Send", "Bhejo"]
+IGNORE_WORDS = [
+    "movies", "movie", "episode", "episodes", "south indian", "south indian movie",
+    "south movie", "south indian", "web-series", "web series", "webseries", "hindi me bhejo",
+    "ful", ",", "!", "kro", "jaldi", "audio", "language", "mkv", "mp4", "web", "series",
+    "hollywood", "all", "bollywood", "south", "hd", "karo", "upload", "bhejo",
+    "fullepisode", "please", "plz", "send", "link", "dabbed", "dubbed", "season",
+]
 
 BAD_WORDS = [
     "Hdhub4u", "cinevood", "skymoviedHD", "skymovieshd", "filmyzilla", "filmywap", 
@@ -126,7 +132,6 @@ BAD_WORDS = [
     "official", "original", "dubbed", "dual audio", "multi audio", "hq", "hdrip",
     "predvd", "dvdscr", "hdts", "camrip", "hdcam", "hdrip", "brrip", "bdrip",
 ]
-BAD_WORDS.sort(key=len, reverse=True)
 
 LANGUAGES = ["malayalam", "", "tamil", "", "english", "", "hindi", "", "telugu", "", "kannada", "", "gujarati", "", "marathi", "", "punjabi", ""]
 QUALITIES = ["360P", "", "480P", "", "720P", "", "1080P", "", "1440P", "", "2160P", ""]
