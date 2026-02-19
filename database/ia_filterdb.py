@@ -1,3 +1,4 @@
+import asyncio
 from struct import pack
 import re
 import base64
@@ -13,6 +14,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from logging_helper import LOGGER
 import time
+from functools import lru_cache
 
 client = AsyncIOMotorClient(DATABASE_URI)
 db = client[DATABASE_NAME]
@@ -56,24 +58,51 @@ _db_size_cache = {
 }
 DB_SIZE_CACHE_DURATION = 60 
 
+
+@lru_cache(maxsize=512)
+def get_regex_pattern(query):
+    query = query.strip()
+    if not query:
+        raw_pattern = '.'
+    elif ' ' not in query:
+        raw_pattern = r"(\b|[\.\+\-_])" + re.escape(query) + r"(\b|[\.\+\-_])"
+    else:
+        parts = query.split(' ')
+        new_parts = []
+        for part in parts:
+            new_parts.append(r"(\b|[\.\+\-_])" + re.escape(part) + r"(\b|[\.\+\-_])")
+        raw_pattern = r".*[\s\.\+\-_()\[\]]".join(new_parts)
+    try:
+        return re.compile(raw_pattern, flags=re.IGNORECASE)
+    except Exception:
+        return None
+
+
 async def check_db_size(silentdb):
     try:
         global _db_size_cache
         current_time = time.time()
         is_primary = False
-        if isinstance(silentdb, AsyncIOMotorClient) or isinstance(silentdb, type(db)):
-            if silentdb.name == db.name: is_primary = True
-        elif hasattr(silentdb, 'db'):
-             if silentdb.db.name == db.name: is_primary = True
+
+        # Identify if it's the primary DB
+        if hasattr(silentdb, 'name') and silentdb.name == db.name:
+            is_primary = True
+        elif hasattr(silentdb, 'db') and silentdb.db.name == db.name:
+            is_primary = True
+
         if is_primary and (current_time - _db_size_cache['time'] < DB_SIZE_CACHE_DURATION):
             return _db_size_cache['size']
-        size = 0
-        if isinstance(silentdb, AsyncIOMotorClient) or isinstance(silentdb, type(db)):
-             size = (await silentdb.command("dbstats"))['dataSize']
-        elif hasattr(silentdb, 'db'):
-             size = (await silentdb.db.command("dbstats"))['dataSize']
-        elif hasattr(silentdb, 'collection'):
-            size = (await silentdb.collection.database.command("dbstats"))['dataSize']
+
+        stats = None
+        if hasattr(silentdb, 'command'):
+            stats = await silentdb.command("dbstats")
+        elif hasattr(silentdb, 'db') and hasattr(silentdb.db, 'command'):
+            stats = await silentdb.db.command("dbstats")
+        elif hasattr(silentdb, 'collection') and hasattr(silentdb.collection.database, 'command'):
+            stats = await silentdb.collection.database.command("dbstats")
+
+        size = stats.get('dataSize', 0) if stats else 0
+
         if is_primary:
             _db_size_cache['time'] = current_time
             _db_size_cache['size'] = size
@@ -87,18 +116,29 @@ async def save_file(media) -> Tuple[bool, int]:
         file_id, file_ref = unpack_new_file_id(media.file_id)
         file_name = clean_filename(media.file_name)
         use_secondary = False
-        saveMedia = Media        
+        saveMedia = Media
+
         if MULTIPLE_DB:
             primary_db_size = await check_db_size(db)
             db_change_limit_bytes = DB_CHANGE_LIMIT * 1024 * 1024
             if primary_db_size >= db_change_limit_bytes:
                 saveMedia = Media2
-                use_secondary = True                
+                use_secondary = True
+
         if use_secondary:
-             exists_in_primary = await Media.count_documents({'file_id': file_id}, limit=1)
-             if exists_in_primary:
-                 LOGGER.info(f'{file_name} Is Already Saved In Primary Database!')
-                 return False, 0
+            exists_in_primary, exists_in_secondary = await asyncio.gather(
+                Media.find_one({'_id': file_id}),
+                Media2.find_one({'_id': file_id})
+            )
+            if exists_in_primary or exists_in_secondary:
+                LOGGER.info(f'{file_name} Is Already Saved In Database!')
+                return False, 0
+        else:
+            exists = await Media.find_one({'_id': file_id})
+            if exists:
+                LOGGER.info(f'{file_name} Is Already Saved In Primary Database!')
+                return False, 0
+
         file = saveMedia(
             file_id=file_id,
             file_ref=file_ref,
@@ -130,27 +170,15 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
             if user_max_btn:
                 max_results = 10
             else:
-                 max_results = int(MAX_B_TN)
+                max_results = int(MAX_B_TN)
         except (KeyError, ValueError):
             await save_group_settings(int(chat_id), 'max_btn', False)
             max_results = int(MAX_B_TN)
 
-    query = query.strip()
-    if not query:
-        raw_pattern = '.'
-    elif ' ' not in query:
-        raw_pattern = r"(\b|[\.\+\-_])" + query + r"(\b|[\.\+\-_])"
-    else:
-        parts = query.split(' ')
-        new_parts = []
-        for part in parts:
-             new_parts.append(r"(\b|[\.\+\-_])" + part + r"(\b|[\.\+\-_])")
-        raw_pattern = r".*[\s\.\+\-_()\[\]]".join(new_parts)
-    try:
-        regex = re.compile(raw_pattern, flags=re.IGNORECASE)
-    except Exception as e:
-        LOGGER.error(f"Regex Error: {e}")
+    regex = get_regex_pattern(query)
+    if not regex:
         return [], 0, 0
+
     if not isinstance(filter, dict):
         if USE_CAPTION_FILTER:
             filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
@@ -160,77 +188,92 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
         filter['file_type'] = file_type
     if max_results % 2 != 0:
         max_results += 1
-    cursor1 = Media.find(filter).sort('$natural', -1).skip(offset).limit(max_results)
+
+    # Use field projection to reduce data transfer
+    projection = {
+        'file_name': 1,
+        'file_size': 1,
+        'file_id': 1,
+        'file_type': 1,
+        'caption': 1,
+        '_id': 1
+    }
+
+    cursor1 = Media.find(filter, projection).sort('$natural', -1).skip(offset).limit(max_results)
     files = await cursor1.to_list(length=max_results)
     total_results = 0
+
     if not MULTIPLE_DB:
         if offset == 0 and len(files) < max_results:
-             total_results = len(files)
+            total_results = len(files)
         else:
-             total_results = await Media.count_documents(filter)
+            total_results = await Media.count_documents(filter)
     else:
-        count_db1 = await Media.count_documents(filter)
-        count_db2 = await Media2.count_documents(filter)
+        # Use asyncio.gather for concurrent counting
+        count_db1_task = Media.count_documents(filter)
+        count_db2_task = Media2.count_documents(filter)
+        count_db1, count_db2 = await asyncio.gather(count_db1_task, count_db2_task)
         total_results = count_db1 + count_db2
+
         if len(files) < max_results:
             remaining_needed = max_results - len(files)
             if len(files) > 0:
-                 cursor2 = Media2.find(filter).sort('$natural', -1).limit(remaining_needed)
-                 files2 = await cursor2.to_list(length=remaining_needed)
-                 files.extend(files2)
+                cursor2 = Media2.find(filter, projection).sort('$natural', -1).limit(remaining_needed)
+                files2 = await cursor2.to_list(length=remaining_needed)
+                files.extend(files2)
             else:
                 if offset >= count_db1:
                     offset_db2 = offset - count_db1
-                    cursor2 = Media2.find(filter).sort('$natural', -1).skip(offset_db2).limit(max_results)
+                    cursor2 = Media2.find(filter, projection).sort('$natural', -1).skip(offset_db2).limit(max_results)
                     files = await cursor2.to_list(length=max_results)
-                else:
-                    pass
+
     next_offset = offset + len(files)
     if next_offset >= total_results or len(files) == 0:
         next_offset = 0
     return files, next_offset, total_results
     
 async def get_bad_files(query, file_type=None):
-    query = query.strip()
-    if not query:
-        raw_pattern = '.'
-    elif ' ' not in query:
-        raw_pattern = r"(\b|[\.\+\-_])" + query + r"(\b|[\.\+\-_])"
-    else:
-        parts = query.split(' ')
-        new_parts = []
-        for part in parts:
-             new_parts.append(r"(\b|[\.\+\-_])" + part + r"(\b|[\.\+\-_])")
-        raw_pattern = r".*[\s\.\+\-_()]".join(new_parts)
-    try:
-        regex = re.compile(raw_pattern, flags=re.IGNORECASE)
-    except:
+    regex = get_regex_pattern(query)
+    if not regex:
         return [], 0
+
     if USE_CAPTION_FILTER:
         filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
     else:
         filter = {'file_name': regex}
     if file_type:
         filter['file_type'] = file_type
-    cursor1 = Media.find(filter).sort('$natural', -1)
-    files1 = await cursor1.to_list(length=(await Media.count_documents(filter)))
-    files = files1
+
     if MULTIPLE_DB:
-        cursor2 = Media2.find(filter).sort('$natural', -1)
-        files2 = await cursor2.to_list(length=(await Media2.count_documents(filter)))
-        files.extend(files2)
-    total_results = len(files)
-    return files, total_results
+        # Fetch from both in parallel
+        async def fetch_all(media_class):
+            cursor = media_class.find(filter).sort('$natural', -1)
+            count = await media_class.count_documents(filter)
+            return await cursor.to_list(length=count)
+
+        files1_task = fetch_all(Media)
+        files2_task = fetch_all(Media2)
+        files1, files2 = await asyncio.gather(files1_task, files2_task)
+        files = files1 + files2
+    else:
+        cursor = Media.find(filter).sort('$natural', -1)
+        count = await Media.count_documents(filter)
+        files = await cursor.to_list(length=count)
+
+    return files, len(files)
     
 
 async def get_file_details(query):
     filter = {'file_id': query}
-    cursor = Media.find(filter)
-    filedetails = await cursor.to_list(length=1)
-    if not filedetails:
-        cursor2 = Media2.find(filter)
-        filedetails = await cursor2.to_list(length=1)
-    return filedetails
+    if MULTIPLE_DB:
+        result1, result2 = await asyncio.gather(
+            Media.find(filter).to_list(length=1),
+            Media2.find(filter).to_list(length=1)
+        )
+        return result1 if result1 else result2
+    else:
+        cursor = Media.find(filter)
+        return await cursor.to_list(length=1)
 
 
 def encode_file_id(s: bytes) -> str:
@@ -263,20 +306,25 @@ def unpack_new_file_id(new_file_id):
     file_ref = encode_file_ref(decoded.file_reference)
     return file_id, file_ref
 
+_TITLE_PROJECTION = {'file_name': 1, 'caption': 1, '_id': 0}
+
 async def siletxbotz_fetch_media(limit: int) -> List[dict]:
     try:
         if MULTIPLE_DB:
-            cursor = Media2.find().sort("$natural", -1).limit(limit)
-            files2 = await cursor.to_list(length=limit)
-            cursor = Media.find().sort("$natural", -1).limit(limit)
-            files1 = await cursor.to_list(length=limit)
-            return files1 + files2
-        cursor = Media.find().sort("$natural", -1).limit(limit)
-        files = await cursor.to_list(length=limit)
+            half = limit // 2
+            remainder = limit - half
+            results = await asyncio.gather(
+                Media.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(half).to_list(length=half),
+                Media2.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(remainder).to_list(length=remainder)
+            )
+            return results[0] + results[1]
+
+        files = await Media.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(limit).to_list(length=limit)
         return files
     except Exception as e:
         LOGGER.error(f"Error in siletxbotz_fetch_media: {e}")
         return []
+
 
 async def silentxbotz_clean_title(filename: str, is_series: bool = False) -> str:
     try:
@@ -297,15 +345,16 @@ async def silentxbotz_clean_title(filename: str, is_series: bool = False) -> str
     except Exception as e:
         LOGGER.error(f"Error in silentxbotz_clean_title: {e}")
         return filename
-        
+
+
 async def siletxbotz_get_movies(limit: int = 20) -> List[str]:
     try:
-        cursor = await siletxbotz_fetch_media(limit * 2)
+        candidates = await siletxbotz_fetch_media(limit * 2)
         results = set()
         pattern = r"(?:s\d{1,2}|season\s*\d+)(?:\s*e\d{1,2}|episode\s*\d+)?\b"
-        for file in cursor:
-            file_name = getattr(file, "file_name", "")
-            caption = getattr(file, "caption", "")
+        for file in candidates:
+            file_name = file.get("file_name") if isinstance(file, dict) else getattr(file, "file_name", "")
+            caption = file.get("caption", "") if isinstance(file, dict) else getattr(file, "caption", "")
             if not file_name:
                 continue
             if re.search(pattern, file_name, re.IGNORECASE) or (caption and re.search(pattern, caption, re.IGNORECASE)):
@@ -320,18 +369,20 @@ async def siletxbotz_get_movies(limit: int = 20) -> List[str]:
         LOGGER.error(f"Error in siletxbotz_get_movies: {e}")
         return []
 
+
 async def siletxbotz_get_series(limit: int = 30) -> Dict[str, List[int]]:
     try:
-        cursor = await siletxbotz_fetch_media(limit * 5)
+        candidates = await siletxbotz_fetch_media(limit * 3)
         grouped = defaultdict(list)
         pattern = r"(.*?)(?:S(\d{1,2})|Season\s*(\d+))"
-        for file in cursor:
-            file_name = getattr(file, "file_name", "")
+        for file in candidates:
+            file_name = file.get("file_name") if isinstance(file, dict) else getattr(file, "file_name", "")
+            caption = file.get("caption", "") if isinstance(file, dict) else getattr(file, "caption", "")
             if not file_name:
                 continue
             match = re.search(pattern, file_name, re.IGNORECASE)
-            if not match and getattr(file, "caption", ""):
-                 match = re.search(pattern, file.caption, re.IGNORECASE)
+            if not match and caption:
+                match = re.search(pattern, caption, re.IGNORECASE)
             if match:
                 title_part = match.group(1)
                 season_num = match.group(2) or match.group(3)

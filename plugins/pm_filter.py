@@ -26,8 +26,10 @@ from database.topdb import silentdb
 import requests
 import string
 import tracemalloc
+import atexit
 
 tracemalloc.start()
+atexit.register(tracemalloc.stop)
 
 TIMEZONE = "Asia/Kolkata"
 BUTTON = {}
@@ -46,7 +48,7 @@ async def give_filter(client, message):
             pass
     maintenance_mode = await db.get_maintenance_status(bot_id)
     if maintenance_mode and message.from_user.id not in ADMINS:
-        await message.reply_text(f"ɪ ᴀᴍ ᴄᴜʀʀᴇɴᴛʟʏ ᴜɴᴅᴇʀ ᴍᴀɪɴᴛᴇɴᴀɴᴄᴇ 🛠️. ɪ ᴡɪʟʟ ʙᴇ ʙᴀᴄᴋ ꜱᴏᴏɴ 🔜", disable_web_page_preview=True)
+        await message.reply_text("ɪ ᴀᴍ ᴄᴜʀʀᴇɴᴛʟʏ ᴜɴᴅᴇʀ ᴍᴀɪɴᴛᴇɴᴀɴᴄᴇ 🛠️. ɪ ᴡɪʟʟ ʙᴇ ʙᴀᴄᴋ ꜱᴏᴏɴ 🔜")
         return
     await silentdb.update_top_messages(message.from_user.id, message.text)
     if message.chat.id != SUPPORT_CHAT_ID:
@@ -80,7 +82,7 @@ async def pm_text(bot, message):
             pass
     maintenance_mode = await db.get_maintenance_status(bot_id)
     if maintenance_mode and message.from_user.id not in ADMINS:
-        await message.reply_text(f"ɪ ᴀᴍ ᴄᴜʀʀᴇɴᴛʟʏ ᴜɴᴅᴇʀ ᴍᴀɪɴᴛᴇɴᴀɴᴄᴇ 🛠️. ɪ ᴡɪʟʟ ʙᴇ ʙᴀᴄᴋ ꜱᴏᴏɴ 🔜", disable_web_page_preview=True)
+        await message.reply_text("ɪ ᴀᴍ ᴄᴜʀʀᴇɴᴛʟʏ ᴜɴᴅᴇʀ ᴍᴀɪɴᴛᴇɴᴀɴᴄᴇ 🛠️. ɪ ᴡɪʟʟ ʙᴇ ʙᴀᴄᴋ ꜱᴏᴏɴ 🔜")
         return
     if content.startswith(("/", "#")):
         return  
@@ -117,7 +119,7 @@ async def refercall(bot, query):
         parse_mode=enums.ParseMode.HTML
         )
     await query.answer()
-
+	
 async def build_pagination_buttons(btn, total_results, current_offset, next_offset, req, key, settings):
     limit = 10 if settings.get('max_btn') else int(MAX_B_TN)
     total_pages = math.ceil(total_results / limit)
@@ -185,7 +187,7 @@ async def open_category_handler(client, query, items, prefix, title_text):
                 f"⚠️ ʜᴇʟʟᴏ {query.from_user.first_name},\nᴛʜɪꜱ ɪꜱ ɴᴏᴛ ʏᴏᴜʀ ᴍᴏᴠɪᴇ ʀᴇǫᴜᴇꜱᴛ,\nʀᴇǫᴜᴇꜱᴛ ʏᴏᴜʀ'ꜱ...",
                 show_alert=True,
             )
-    except:
+    except Exception:
         pass
     _, key, offset = query.data.split("#")
     btn = []
@@ -311,7 +313,7 @@ async def handle_alert_status(client, query, status_text, alert_message, log_has
     try:
         link = await client.create_chat_invite_link(int(REQST_CHANNEL))
         invite_url = link.invite_link
-    except:
+    except Exception:
         invite_url = GRP_LNK
     btn2 = [[
         InlineKeyboardButton('ᴊᴏɪɴ ᴄʜᴀɴɴᴇʟ', url=invite_url),
@@ -353,7 +355,7 @@ async def next_page(bot, query):
             return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
         try:
             offset = int(offset)
-        except:
+        except (ValueError, TypeError):
             offset = 0
 
         if BUTTONS.get(key)!=None:
@@ -425,7 +427,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
     lazyData = query.data
     try:
         link = await client.create_chat_invite_link(int(REQST_CHANNEL))
-    except:
+    except Exception:
         pass
     if query.data == "close_data":
         await query.message.delete()     
@@ -626,16 +628,16 @@ async def cb_handler(client: Client, query: CallbackQuery):
             btn= [[
                 InlineKeyboardButton("𝖲𝗍𝗋𝖾𝖺𝗆", url=silent_stream),
                 InlineKeyboardButton("𝖣𝗈𝗐𝗇𝗅𝗈𝖺𝖽", url=silent_download)        
-        ]]
+	    ]]
             await query.edit_message_reply_markup(
                 reply_markup=InlineKeyboardMarkup(btn)
-        )
+	    )
             await silent_msg.reply_text(
                 text=f"•• ʟɪɴᴋ ɢᴇɴᴇʀᴀᴛᴇᴅ ꜰᴏʀ ɪᴅ #{user_id} \n•• ᴜꜱᴇʀɴᴀᴍᴇ : {username} \n\n•• ᖴᎥᒪᗴ Nᗩᗰᗴ : {fileName}",
                 quote=True,
                 disable_web_page_preview=True,
                 reply_markup=InlineKeyboardMarkup(btn)
-        )
+	    )                
         except Exception as e:
             LOGGER.error(e)
             await query.answer(f"⚠️ SOMETHING WENT WRONG \n\n{e}", show_alert=True)
@@ -724,7 +726,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 query.message.chat.id, 
                 query.message.id, 
                 InputMediaPhoto(SUBSCRIPTION)
-            )
+	        ) 
             await query.message.edit_text(
                 text=script.PREMIUM_TEXT.format(query.from_user.mention),
                 reply_markup=reply_markup,
@@ -745,7 +747,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 query.message.chat.id, 
                 query.message.id, 
                 InputMediaPhoto(SUBSCRIPTION)
-            )
+	        ) 
             await query.message.edit_text(
                 text=script.PREMIUM_UPI_TEXT.format(query.from_user.mention),
                 reply_markup=reply_markup,
@@ -767,12 +769,12 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 query.message.chat.id, 
                 query.message.id, 
                 InputMediaPhoto(random.choice(PICS))
-            )
+	        ) 
             await query.message.edit_text(
                 text=script.PREMIUM_STAR_TEXT,
                 reply_markup=reply_markup,
                 parse_mode=enums.ParseMode.HTML
-        )
+	    )
         except Exception as e:
             LOGGER.error(e)
 
@@ -829,7 +831,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 reply_markup=reply_markup,
                 parse_mode=enums.ParseMode.HTML 
             )
-
+		
     await query.answer(MSG_ALRT)
 
     
@@ -838,14 +840,14 @@ async def auto_filter(client, msg, spoll=False):
     if not spoll:
         message = msg
         if message.text.startswith("/"): return
-        if re.findall("((^\/|^,|^!|^\.|^[\U0001F600-\U000E007F]).*)", message.text):
+        if re.findall(r"((^\/|^,|^!|^\.|^[\U0001F600-\U000E007F]).*)", message.text):
             return
         if len(message.text) < 100:
             search = await replace_words(message.text)
             search = search.lower()
             search = search.replace("-", " ")
-            search = search.replace(":","")
-            search = search.replace("'","")
+            search = search.replace(":", "")
+            search = search.replace("'", "")
             search = re.sub(r'\s+', ' ', search).strip()
             m=await message.reply_text(f'<b>Wait {message.from_user.mention} Searching Your Query: <i>{search}...</i></b>', reply_to_message_id=message.id)
             files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, filter=True)
@@ -917,7 +919,7 @@ async def auto_filter(client, msg, spoll=False):
             poster_url = imdb.get('poster')
     if imdb:
         cap = TEMPLATE.format(
-            qurey=search,
+            query=search,
             title=imdb['title'],
             votes=imdb['votes'],
             aka=imdb["aka"],
@@ -969,9 +971,8 @@ async def auto_filter(client, msg, spoll=False):
                 )
                 await m.delete()
                 if settings['auto_delete']:
-                    await asyncio.sleep(DELETE_TIME)
-                    await hehe.delete()
-                    await message.delete()
+                    asyncio.create_task(delete_after_delay(hehe, DELETE_TIME))
+                    asyncio.create_task(delete_after_delay(message, DELETE_TIME))
             except (MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty):
                 pic = imdb.get('poster')
                 if pic:
@@ -984,9 +985,8 @@ async def auto_filter(client, msg, spoll=False):
                     )
                     await m.delete()
                     if settings['auto_delete']:
-                        await asyncio.sleep(DELETE_TIME)
-                        await hmm.delete()
-                        await message.delete()
+                        asyncio.create_task(delete_after_delay(hmm, DELETE_TIME))
+                        asyncio.create_task(delete_after_delay(message, DELETE_TIME))
                 else:
                     fek = await m.edit_text(
                         text=cap, 
@@ -994,9 +994,8 @@ async def auto_filter(client, msg, spoll=False):
                         parse_mode=enums.ParseMode.HTML
                     )
                     if settings['auto_delete']:
-                        await asyncio.sleep(DELETE_TIME)
-                        await fek.delete()
-                        await message.delete()
+                        asyncio.create_task(delete_after_delay(fek, DELETE_TIME))
+                        asyncio.create_task(delete_after_delay(message, DELETE_TIME))
             except Exception as e:
                 LOGGER.error(e)
                 fek = await m.edit_text(
@@ -1005,9 +1004,8 @@ async def auto_filter(client, msg, spoll=False):
                     parse_mode=enums.ParseMode.HTML
                 )
                 if settings['auto_delete']:
-                    await asyncio.sleep(DELETE_TIME)
-                    await fek.delete()
-                    await message.delete()
+                    asyncio.create_task(delete_after_delay(fek, DELETE_TIME))
+                    asyncio.create_task(delete_after_delay(message, DELETE_TIME))
         else:
             fuk = await m.edit_text(
                 text=cap, 
@@ -1016,9 +1014,8 @@ async def auto_filter(client, msg, spoll=False):
                 parse_mode=enums.ParseMode.HTML
             )
             if settings['auto_delete']:
-                await asyncio.sleep(DELETE_TIME)
-                await fuk.delete()
-                await message.delete()
+                asyncio.create_task(delete_after_delay(fuk, DELETE_TIME))
+                asyncio.create_task(delete_after_delay(message, DELETE_TIME))
     except KeyError:
         await save_group_settings(message.chat.id, 'auto_delete', True)
         pass
@@ -1052,13 +1049,13 @@ async def advantage_spell_chok(client, message):
     query = query.strip() + " movie"
     try:
         movies = await get_poster(search, bulk=True)
-    except:
+    except Exception:
         k = await message.reply(script.I_CUDNT.format(message.from_user.mention))
         await asyncio.sleep(60)
         await k.delete()
         try:
             await message.delete()
-        except:
+        except Exception:
             pass
         return
     if not movies:
@@ -1088,5 +1085,5 @@ async def advantage_spell_chok(client, message):
     await d.delete()
     try:
         await message.delete()
-    except:
+    except Exception:
         pass

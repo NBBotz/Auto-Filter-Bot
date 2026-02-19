@@ -93,6 +93,13 @@ def silentx_plugins_handler(app, plugins_dir: str | Path = "plugins", package_na
 
 
 async def SilentXBotz_start():
+    if MULTIPLE_DB and not DATABASE_URI2:
+        LOGGER.error("DATABASE_URI2 Is Not Provided But MULTIPLE_DB Is Set To True. Please Fill The DATABASE_URI2 Var!")
+        sys.exit(1)
+    if not API_ID or not API_HASH or not BOT_TOKEN:
+        LOGGER.error("Missing required environment variables (API_ID, API_HASH, or BOT_TOKEN)")
+        sys.exit(1)
+
     LOGGER.info("Initializing Your Bot!")
     await SilentX.start()
     bot_info = await SilentX.get_me()
@@ -111,19 +118,12 @@ async def SilentXBotz_start():
         temp.BANNED_CHATS = b_chats
     except Exception as e:
         LOGGER.error(f"Error fetching banned users/chats: {e}")
-    if MULTIPLE_DB and not DATABASE_URI2:
-        LOGGER.error(
-            "DATABASE_URI2 Is Not Provided But MULTIPLE_DB Is Set To True. "
-            "Please Fill The DATABASE_URI2 Var!"
-        )
-        sys.exit(1)
     try:
         await Media.ensure_indexes()
         if MULTIPLE_DB:
             await Media2.ensure_indexes()
-            LOGGER.info(
-                "Multiple Database Mode On. Now Files Will Be Saved In Second DB If First DB Is Full"
-            )
+        if MULTIPLE_DB:
+            LOGGER.info("Multiple Database Mode On. Now Files Will Be Saved In Second DB If First DB Is Full")
         else:
             LOGGER.info("Single DB Mode On! Files Will Be Saved In First Database")
     except Exception as e:

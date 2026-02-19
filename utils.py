@@ -10,6 +10,7 @@ import pytz
 import random 
 import re
 import os
+import time as time_module
 from datetime import datetime, date, time, timedelta
 import string
 from typing import List
@@ -38,6 +39,7 @@ class temp(object):
     BANNED_USERS = []
     BANNED_CHATS = []
     SETTINGS = {}
+    SETTINGS_EXPIRY = {}
     ME = None
     CURRENT=int(os.environ.get("SKIP", 2))
     CANCEL = False
@@ -57,7 +59,7 @@ async def is_check_admin(bot, chat_id, user_id):
     try:
         member = await bot.get_chat_member(chat_id, user_id)
         return member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]
-    except:
+    except Exception:
         return False
     
 async def users_broadcast(user_id, message, is_pin):
@@ -68,7 +70,7 @@ async def users_broadcast(user_id, message, is_pin):
         return True, "Success"
     except FloodWait as e:
         await asyncio.sleep(e.x)
-        return await users_broadcast(user_id, message)
+        return await users_broadcast(user_id, message, is_pin)
     except InputUserDeactivated:
         await db.delete_user(int(user_id))
         LOGGER.info(f"{user_id}-Removed from Database, since deleted account.")
@@ -90,12 +92,12 @@ async def groups_broadcast(chat_id, message, is_pin):
         if is_pin:
             try:
                 await m.pin()
-            except:
+            except Exception:
                 pass
         return "Success"
     except FloodWait as e:
         await asyncio.sleep(e.x)
-        return await groups_broadcast(chat_id, message)
+        return await groups_broadcast(chat_id, message, is_pin)
     except Exception as e:
         await db.delete_chat(chat_id)
         return "Error"
@@ -136,6 +138,13 @@ async def clear_junk(user_id, message):
     except Exception as e:
         return False, "Error"
     
+async def delete_after_delay(message, delay):
+    await asyncio.sleep(delay)
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
 async def get_status(bot_id):
     try:
         return await db.movie_update_status(bot_id) or False  
@@ -341,15 +350,23 @@ async def get_shortlink(link, grp_id, is_second_shortener=False, is_third_shorte
 
 async def get_settings(group_id):
     settings = temp.SETTINGS.get(group_id)
-    if not settings:
-        settings = await db.get_settings(group_id)
-        temp.SETTINGS.update({group_id: settings})
+    expiry = temp.SETTINGS_EXPIRY.get(group_id, 0)
+    current_time = time_module.time()
+
+    # Cache settings for 5 minutes (300 seconds)
+    if settings and current_time < expiry:
+        return settings
+
+    settings = await db.get_settings(group_id)
+    temp.SETTINGS[group_id] = settings
+    temp.SETTINGS_EXPIRY[group_id] = current_time + 300
     return settings
     
 async def save_group_settings(group_id, key, value):
     current = await get_settings(group_id)
     current.update({key: value})
-    temp.SETTINGS.update({group_id: current})
+    temp.SETTINGS[group_id] = current
+    temp.SETTINGS_EXPIRY[group_id] = time_module.time() + 300
     await db.update_settings(group_id, current)
 
 async def delete_group_setting(group_id, key):
@@ -403,17 +420,34 @@ def extract_request_content(message_text):
         return match.group(1).strip()
     return message_text.strip()
 
-def clean_filename(file_name):
-    if not file_name:
+def clean_filename(filename):
+    if not filename:
         return ""
+    parts = filename.rsplit('.', 1)
+    if len(parts) == 2 and len(parts[1]) <= 5:
+        name, ext = parts
+    else:
+        name, ext = filename, ""
+    original_name = name
+    name = re.sub(r'[_\-\.\+]', ' ', name)  
     if BAD_WORDS_REGEX:
-        file_name = BAD_WORDS_REGEX.sub("", file_name)
-    file_name = re.sub(r'http\S+|www\.\S+|@\w+|#\w+', '', file_name)
-    file_name = re.sub(r'[_\-\.\+]', ' ', file_name)
-    file_name = re.sub(r"[^a-zA-Z0-9\s]", " ", file_name)
-    file_name = re.sub(r'[^\x00-\x7F]+', '', file_name)
-    file_name = re.sub(r'\s+', ' ', file_name).strip()
-    return file_name
+        name = BAD_WORDS_REGEX.sub('', name)
+    name = re.sub(r'@\w+\s*', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'#\w+\s*', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'www\.\S+\s*', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'https?://\S+\s*', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\[\s*', ' ', name, flags=re.IGNORECASE)
+    name = re.sub(r'\s*\]', ' ', name, flags=re.IGNORECASE)
+    name = re.sub(r'\(\s*', ' ', name, flags=re.IGNORECASE)
+    name = re.sub(r'\s*\)', ' ', name, flags=re.IGNORECASE)
+    name = re.sub(r'[^\w\s]', ' ', name)
+    name = re.sub(r'\s+', ' ', name).strip()
+    if not name or not any(c.isalnum() for c in name):
+        words = re.findall(r'[A-Za-z0-9]+', original_name)
+        name = ' '.join(words) if words else "untitled"
+    name = ' '.join(w.capitalize() for w in name.split())  
+    final_result = f"{name}{ext}" if ext else name   
+    return final_result
 
 async def replace_words(string):
     ignorewords = IGNORE_WORDS
@@ -578,7 +612,7 @@ def gfilterparser(text, keyword):
 
     try:
         return note_data, buttons, alerts
-    except:
+    except Exception:
         return note_data, buttons, None
 
 def parser(text, keyword):
@@ -630,7 +664,7 @@ def parser(text, keyword):
 
     try:
         return note_data, buttons, alerts
-    except:
+    except Exception:
         return note_data, buttons, None
 
 def remove_escapes(text: str) -> str:
@@ -727,7 +761,7 @@ async def get_cap(settings, remaining_seconds, files, query, total_results, sear
             if imdb:
                 TEMPLATE = script.IMDB_TEMPLATE_TXT
                 cap = TEMPLATE.format(
-                    qurey=search,
+                    query=search,
                     title=imdb['title'],
                     votes=imdb['votes'],
                     aka=imdb["aka"],
