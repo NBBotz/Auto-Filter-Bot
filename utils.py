@@ -26,7 +26,7 @@ BTN_URL_REGEX = re.compile(
     r"(\[([^\[]+?)\]\((buttonurl|buttonalert):(?:/{0,2})(.+?)(:same)?\))"
 )
 
-BAD_WORDS_REGEX = re.compile('|'.join(map(re.escape, BAD_WORDS)), flags=re.IGNORECASE) if BAD_WORDS else None
+BAD_WORDS_REGEX = re.compile('|'.join(map(re.escape, sorted(BAD_WORDS, key=len, reverse=True))), flags=re.IGNORECASE) if BAD_WORDS else None
 
 imdb = IMDBKit() 
 BANNED = {}
@@ -189,7 +189,7 @@ async def get_poster(query, bulk=False, id=False, file=None):
         if not search_result or not search_result.titles:
             return None
         
-        movie_list = search_result.titles
+        movie_list = search_result.titles[:MAX_LIST_ELM]
         
         if year_val:
             filtered = [m for m in movie_list if m.year and str(m.year) == str(year_val)]
@@ -205,7 +205,10 @@ async def get_poster(query, bulk=False, id=False, file=None):
             filtered_kind = filtered
         
         if bulk:
-            return filtered_kind
+            return filtered_kind[:MAX_LIST_ELM]
+            
+        if not filtered_kind:
+            return None
             
         movie_brief = filtered_kind[0]
         movieid_str = movie_brief.imdb_id 
@@ -223,9 +226,13 @@ async def get_poster(query, bulk=False, id=False, file=None):
     else:
         date = "N/A"
         
-    plot = movie.plot or ""
-    if plot and len(plot) > 800:
-        plot = plot[0:800] + "..."
+    plot = movie.plot[0] if isinstance(movie.plot, list) else movie.plot or ""
+    if len(plot) > 800:
+        plot = plot[:800] + "..."
+    imdb_id = movie.imdb_id
+    
+    if not imdb_id.startswith("tt"):
+        imdb_id = f"tt{imdb_id}"
         
     return {
         'title': movie.title,
@@ -240,7 +247,7 @@ async def get_poster(query, bulk=False, id=False, file=None):
         "box_office": movie.worldwide_gross,
         'localized_title': movie.title_localized,
         'kind': movie.kind,
-        "imdb_id": f"tt{movie.imdb_id}",
+        "imdb_id": imdb_id,
         "cast": listx_to_str(movie.stars),
         "runtime": listx_to_str(movie.duration),
         "countries": listx_to_str(movie.countries),
@@ -259,7 +266,7 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'poster': movie.cover_url,
         'plot': plot,
         'rating': str(movie.rating),
-        'url': movie.url or f'https://www.imdb.com/title/tt{movie.imdb_id}'
+        "url": movie.url or f"https://www.imdb.com/title/{imdb_id}"
     }
 
 async def fetch_tmdb_data(title: str, year: str = None) -> Optional[Dict[str, Any]]:
@@ -450,11 +457,11 @@ def clean_filename(filename):
     return final_result
 
 async def replace_words(string):
-    ignorewords = IGNORE_WORDS
+    ignorewords = sorted(IGNORE_WORDS, key=len, reverse=True)
     pattern = r'\b(?:{})\b'.format('|'.join(map(re.escape, ignorewords)))
-    formatted = re.sub(pattern, '', string)
+    formatted = re.sub(pattern, '', string, flags=re.IGNORECASE)
     return formatted.replace("-", " ")
-
+    
 def split_list(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]  
@@ -755,7 +762,7 @@ async def get_cap(settings, remaining_seconds, files, query, total_results, sear
         if IMDB_CAP:
             cap = IMDB_CAP
             for file_num, file in enumerate(files, start=offset+1):
-                cap += f"\n\n<b>{file_num}. <a href='https://telegram.me/{temp.U_NAME}?start=file_{query.message.chat.id}_{file.file_id}'>{get_size(file.file_size)}| {clean_filename(file.file_name)}</a></b>"
+                cap += f"\n\n<b>{file_num}. <a href='https://telegram.me/{temp.U_NAME}?start=file_{query.message.chat.id}_{file.file_id}'>{get_size(file.file_size)} | {clean_filename(file.file_name)}</a></b>"
         else:
             imdb = await get_poster(search, file=(files[0]).file_name) if settings["imdb"] else None
             if imdb:
@@ -792,13 +799,13 @@ async def get_cap(settings, remaining_seconds, files, query, total_results, sear
                     **locals()
                 )
                 for file_num, file in enumerate(files, start=offset+1):
-                    cap += f"\n\n<b>{file_num}. <a href='https://telegram.me/{temp.U_NAME}?start=file_{query.message.chat.id}_{file.file_id}'>{get_size(file.file_size)}| {clean_filename(file.file_name)}</a></b>"
+                    cap += f"\n\n<b>{file_num}. <a href='https://telegram.me/{temp.U_NAME}?start=file_{query.message.chat.id}_{file.file_id}'>{get_size(file.file_size)} | {clean_filename(file.file_name)}</a></b>"
             else:
                 cap =f"<b>📂 ʜᴇʀᴇ ɪ ꜰᴏᴜɴᴅ ꜰᴏʀ ʏᴏᴜʀ sᴇᴀʀᴄʜ <code>{search}</code></b>\n\n"
                 for file_num, file in enumerate(files, start=offset+1):
-                    cap += f"<b>{file_num}. <a href='https://telegram.me/{temp.U_NAME}?start=file_{query.message.chat.id}_{file.file_id}'>{get_size(file.file_size)}| {clean_filename(file.file_name)}\n\n</a></b>"
+                    cap += f"<b>{file_num}. <a href='https://telegram.me/{temp.U_NAME}?start=file_{query.message.chat.id}_{file.file_id}'>{get_size(file.file_size)} | {clean_filename(file.file_name)}\n\n</a></b>"
     else:
         cap =f"<b>📂 ʜᴇʀᴇ ɪ ꜰᴏᴜɴᴅ ꜰᴏʀ ʏᴏᴜʀ sᴇᴀʀᴄʜ <code>{search}</code></b>\n\n"
         for file_num, file in enumerate(files, start=offset+1):
-            cap += f"<b>{file_num}. <a href='https://telegram.me/{temp.U_NAME}?start=file_{query.message.chat.id}_{file.file_id}'>{get_size(file.file_size)}| {clean_filename(file.file_name)}\n\n</a></b>"
+            cap += f"<b>{file_num}. <a href='https://telegram.me/{temp.U_NAME}?start=file_{query.message.chat.id}_{file.file_id}'>{get_size(file.file_size)} | {clean_filename(file.file_name)}\n\n</a></b>"
     return cap
