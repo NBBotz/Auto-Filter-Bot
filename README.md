@@ -5,7 +5,7 @@
 <h1 align="center">Lucia Filter Bot</h1>
 
 <p align="center">
-  <a href="https://t.me/SilentXBotz_Support">
+  <a href="https://t.me/SilentXBotz">
     <img src="https://img.shields.io/badge/Join-Support%20Group-blue?style=for-the-badge&logo=telegram">
   </a>
   <a href="http://t.me/Lucia_Filter_Bot">
@@ -129,7 +129,7 @@ Choose A Deployment Method Below And Get Your Bot Running Instantly!
 Click The Button Below To Instantly Deploy Your Bot On **Heroku**.  
 
 <p align="center">
-  <a href="https://heroku.com/deploy?template=https://github.com/NBBotz/Auto_Filter_Bot">
+  <a href="https://heroku.com/deploy?template=https://github.com/NBBotz/Auto-Filter-Bot">
     <img src="https://www.herokucdn.com/deploy/button.svg" alt="Deploy on Heroku">
   </a>
 </p>
@@ -142,7 +142,7 @@ Click The Button Below To Instantly Deploy Your Bot On **Heroku**.
 Deploy On **Koyeb** In One Click!  
 
 <p align="center">
-  <a href="https://app.koyeb.com/deploy?type=git&repository=https://github.com/NBBotz/Auto_Filter_Bot&branch=SilentXBotz &name=LuciaFilterBot">
+  <a href="https://app.koyeb.com/deploy?type=git&repository=https://github.com/NBBotz/Auto-Filter-Bot&branch=SilentXBotz &name=LuciaFilterBot">
     <img src="https://www.koyeb.com/static/images/deploy/button.svg" alt="Deploy to Koyeb">
   </a>
 </p>
@@ -157,8 +157,8 @@ Run The Following Commands To Deploy The Bot On A **VPS**:
 
 ```bash
 mkdir SilentXBotz && cd SilentXBotz
-git clone https://github.com/NBBotz/Auto_Filter_Bot
-cd Auto_Filter_Bot
+git clone https://github.com/NBBotz/Auto-Filter-Bot
+cd Auto-Filter-Bot
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -170,7 +170,7 @@ python3 bot.py
 # ! Errors 
 - This Repository May Contain Some Errors. If You Encounter Any Issues, Please Let Us Know, And We Will Do Our Best To Resolve Them.
 <p align="center">
-  <a href="https://t.me/SilentXBotz_Support">
+  <a href="https://t.me/SilentXBotz">
     <img src="https://img.shields.io/badge/Report-Error-red?style=for-the-badge&logo=telegram" alt="Report Error">
   </a>
 </p>
@@ -192,5 +192,5 @@ This Repository Is Provided For Educational Purposes Only. It Is Not Intended Fo
 
 ## License
 
-This Project Is Licensed Under The [GNU General Public License v3.0](https://github.com/NBBotz/Auto_Filter_Bot/blob/SilentXBotz/LICENSE)
+This Project Is Licensed Under The [GNU General Public License v3.0](https://github.com/NBBotz/Auto-Filter-Bot/blob/SilentXBotz/LICENSE)
 
