@@ -122,7 +122,6 @@ async def SilentXBotz_start():
         await Media.ensure_indexes()
         if MULTIPLE_DB:
             await Media2.ensure_indexes()
-        if MULTIPLE_DB:
             LOGGER.info("Multiple Database Mode On. Now Files Will Be Saved In Second DB If First DB Is Full")
         else:
             LOGGER.info("Single DB Mode On! Files Will Be Saved In First Database")
