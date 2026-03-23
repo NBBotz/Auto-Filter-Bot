@@ -6,7 +6,7 @@ marshmallow==3.26.1
 umongo
 requests
 bs4
-git+https://github.com/NBBotz/IMDBKit
+git+https://github.com/NBBotz/IMDBKit.git@main
 shortzy
 datetime
 pytz
