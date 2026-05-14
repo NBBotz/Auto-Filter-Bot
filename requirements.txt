@@ -12,7 +12,7 @@ datetime
 pytz
 aiohttp
 opencv-python-headless==4.8.1.78
-python-dotenv==0.21.1
+python-dotenv==1.2.2
 speedtest
 humanize
 Pillow
