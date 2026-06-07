@@ -1,5 +1,5 @@
 {
-    "name": "Lucia Autofilter Bot",
+    "name": "Thefilmyspot",
     "description": "When you going to send file on telegram channel this bot will save that in database, So you can search that easily in inline mode",
     "stack": "container",
     "keywords": [
@@ -15,8 +15,8 @@
       "index",
       "inline"
     ],
-    "website": "https://github.com/NBBotz/Auto-Filter-Bot",
-    "repository": "https://github.com/NBBotz/Auto-Filter-Bot",
+    "website": "https://telegram.com/Thefilmyspot",
+    "repository": "https://telegram.com/Thefilmyspot",
     "env": {
         "BOT_TOKEN": {
             "description": "Your bot token.",
